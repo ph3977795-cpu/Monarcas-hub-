@@ -1,0 +1,542 @@
+-- ═══════════════════════════════════════════════════════════════
+-- 🌙 LUNAR HUB - SINTONIA RP EDITION
+-- Key: LUNAR-777 | Expira em 7 dias | UI Roxa + Preta
+-- Módulos: ESP, Client-Speed, Ghost, Spinbot, Plataforma, Fly, Texturas
+-- ═══════════════════════════════════════════════════════════════
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+local LOGO_ID = "rbxassetid://105909844134206"
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔐 KEY OFUSCADA (LUNAR-777)
+-- ═══════════════════════════════════════════════════════════════
+local KEY_B64 = "TFVOQVItNzc3"
+local DAYS_VALID = 7
+local MAX_ATTEMPTS = 5
+local STORAGE_FILE = "lunar_cfg.dat"
+
+local function b64Decode(data)
+    local b = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+    data = data:gsub('[^'..b..'=]', '')
+    return (data:gsub('.', function(x)
+        if x == '=' then return '' end
+        local r, f = '', (b:find(x, 1, true) - 1)
+        for i = 6, 1, -1 do
+            r = r .. (f % 2^i - f % 2^(i-1) > 0 and '1' or '0')
+        end
+        return r
+    end):gsub('%d%d%d?%d?%d?%d?%d?%d?', function(x)
+        if #x ~= 8 then return '' end
+        local c = 0
+        for i = 1, 8 do c = c + (x:sub(i,i) == '1' and 2^(8-i) or 0) end
+        return string.char(c)
+    end))
+end
+
+local function reconstructKey() return b64Decode(KEY_B64) end
+
+local function hashKey(str)
+    local h = 5381
+    for i = 1, #str do h = ((h * 33) + string.byte(str, i)) % 4294967296 end
+    return h
+end
+
+local KEY_HASH = hashKey(reconstructKey())
+
+local function xorStr(s, k)
+    local o = {}
+    for i = 1, #s do o[i] = string.char(bit32.bxor(string.byte(s, i), k)) end
+    return table.concat(o)
+end
+
+local function saveKeyData()
+    if not (writefile and readfile) then return end
+    local exp = os.time() + (DAYS_VALID * 86400)
+    pcall(function() writefile(STORAGE_FILE, xorStr("EXP:" .. exp, 42)) end)
+end
+
+local function loadKeyData()
+    if not (readfile and isfile) then return nil end
+    local ok, d = pcall(function()
+        if isfile(STORAGE_FILE) then return xorStr(readfile(STORAGE_FILE), 42) end
+    end)
+    if not ok or not d then return nil end
+    return tonumber(d:match("EXP:(%d+)"))
+end
+
+local function isKeyValid()
+    local exp = loadKeyData()
+    if not exp then return false, 0 end
+    if os.time() >= exp then return false, 0 end
+    return true, math.floor((exp - os.time()) / 86400)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🟣 PALETA
+-- ═══════════════════════════════════════════════════════════════
+local Palette = {
+    Black = Color3.fromRGB(8, 5, 15),
+    BlackSoft = Color3.fromRGB(18, 12, 30),
+    BlackLight = Color3.fromRGB(28, 20, 45),
+    Purple = Color3.fromRGB(128, 0, 255),
+    PurpleLight = Color3.fromRGB(180, 80, 255),
+    PurpleDark = Color3.fromRGB(70, 0, 150),
+    TextLight = Color3.fromRGB(230, 220, 255),
+    TextMuted = Color3.fromRGB(150, 130, 190),
+    Success = Color3.fromRGB(80, 220, 120),
+    Danger = Color3.fromRGB(220, 70, 90),
+}
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🔐 TELA DE KEY
+-- ═══════════════════════════════════════════════════════════════
+local function showKeyScreen(onSuccess)
+    local playerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local old = playerGui:FindFirstChild("LunarKeyScreen")
+    if old then old:Destroy() end
+
+    local keyGui = Instance.new("ScreenGui")
+    keyGui.Name = "LunarKeyScreen"
+    keyGui.ResetOnSpawn = false
+    keyGui.IgnoreGuiInset = true
+    keyGui.Parent = playerGui
+
+    local bg = Instance.new("Frame")
+    bg.Size = UDim2.new(1, 0, 1, 0)
+    bg.BackgroundColor3 = Palette.Black
+    bg.BorderSizePixel = 0
+    bg.Parent = keyGui
+
+    local bgGrad = Instance.new("UIGradient")
+    bgGrad.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Color3.fromRGB(35, 20, 60)),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(8, 5, 15)),
+        ColorSequenceKeypoint.new(1, Color3.fromRGB(40, 20, 70)),
+    })
+    bgGrad.Rotation = 90
+    bgGrad.Parent = bg
+
+    local card = Instance.new("Frame")
+    card.Size = UDim2.new(0, 0, 0, 0)
+    card.Position = UDim2.new(0.5, 0, 0.5, 0)
+    card.BackgroundColor3 = Palette.BlackSoft
+    card.BorderSizePixel = 0
+    card.Parent = bg
+
+    local cc = Instance.new("UICorner")
+    cc.CornerRadius = UDim.new(0, 22)
+    cc.Parent = card
+    local cs = Instance.new("UIStroke")
+    cs.Color = Palette.Purple
+    cs.Thickness = 3
+    cs.Parent = card
+
+    local moon = Instance.new("TextLabel")
+    moon.Size = UDim2.new(1, 0, 0, 45)
+    moon.Position = UDim2.new(0, 0, 0, 15)
+    moon.BackgroundTransparency = 1
+    moon.Text = "🌙"
+    moon.TextSize = 42
+    moon.Font = Enum.Font.GothamBold
+    moon.Parent = card
+
+    local logo = Instance.new("ImageLabel")
+    logo.Size = UDim2.new(0, 120, 0, 120)
+    logo.Position = UDim2.new(0.5, -60, 0, 60)
+    logo.BackgroundColor3 = Palette.Black
+    logo.BorderSizePixel = 0
+    logo.Image = LOGO_ID
+    logo.Parent = card
+    local lc = Instance.new("UICorner")
+    lc.CornerRadius = UDim.new(1, 0)
+    lc.Parent = logo
+    local ls = Instance.new("UIStroke")
+    ls.Color = Palette.Purple
+    ls.Thickness = 3
+    ls.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    ls.Parent = logo
+
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 42)
+    title.Position = UDim2.new(0, 0, 0, 190)
+    title.BackgroundTransparency = 1
+    title.Text = "LUNAR HUB"
+    title.TextColor3 = Palette.PurpleLight
+    title.TextSize = 32
+    title.Font = Enum.Font.GothamBlack
+    title.Parent = card
+    local tg = Instance.new("UIGradient")
+    tg.Color = ColorSequence.new({
+        ColorSequenceKeypoint.new(0, Palette.PurpleLight),
+        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(220, 150, 255)),
+        ColorSequenceKeypoint.new(1, Palette.Purple),
+    })
+    tg.Parent = title
+
+    local div = Instance.new("Frame")
+    div.Size = UDim2.new(0.5, 0, 0, 2)
+    div.Position = UDim2.new(0.25, 0, 0, 234)
+    div.BackgroundColor3 = Palette.Purple
+    div.BorderSizePixel = 0
+    div.Parent = card
+
+    local sub = Instance.new("TextLabel")
+    sub.Size = UDim2.new(1, 0, 0, 20)
+    sub.Position = UDim2.new(0, 0, 0, 242)
+    sub.BackgroundTransparency = 1
+    sub.Text = "🌙 Digite sua key para continuar"
+    sub.TextColor3 = Palette.TextMuted
+    sub.TextSize = 13
+    sub.Font = Enum.Font.Gotham
+    sub.Parent = card
+
+    local inputC = Instance.new("Frame")
+    inputC.Size = UDim2.new(0.82, 0, 0, 52)
+    inputC.Position = UDim2.new(0.09, 0, 0, 282)
+    inputC.BackgroundColor3 = Palette.Black
+    inputC.BorderSizePixel = 0
+    inputC.Parent = card
+    local ic = Instance.new("UICorner")
+    ic.CornerRadius = UDim.new(0, 12)
+    ic.Parent = inputC
+    local is_ = Instance.new("UIStroke")
+    is_.Color = Palette.Purple
+    is_.Thickness = 2
+    is_.Transparency = 0.3
+    is_.Parent = inputC
+
+    local keyInput = Instance.new("TextBox")
+    keyInput.Size = UDim2.new(1, -20, 1, 0)
+    keyInput.Position = UDim2.new(0, 10, 0, 0)
+    keyInput.BackgroundTransparency = 1
+    keyInput.Text = ""
+    keyInput.PlaceholderText = "LUNAR-XXX"
+    keyInput.PlaceholderColor3 = Palette.TextMuted
+    keyInput.TextColor3 = Palette.PurpleLight
+    keyInput.TextSize = 17
+    keyInput.Font = Enum.Font.GothamBold
+    keyInput.ClearTextOnFocus = false
+    keyInput.Parent = inputC
+
+    local validateBtn = Instance.new("TextButton")
+    validateBtn.Size = UDim2.new(0.82, 0, 0, 52)
+    validateBtn.Position = UDim2.new(0.09, 0, 0, 350)
+    validateBtn.BackgroundColor3 = Palette.Purple
+    validateBtn.BorderSizePixel = 0
+    validateBtn.Text = "🌙  VALIDAR KEY"
+    validateBtn.TextColor3 = Palette.TextLight
+    validateBtn.TextSize = 16
+    validateBtn.Font = Enum.Font.GothamBlack
+    validateBtn.AutoButtonColor = false
+    validateBtn.Parent = card
+    local bc = Instance.new("UICorner")
+    bc.CornerRadius = UDim.new(0, 12)
+    bc.Parent = validateBtn
+
+    local status = Instance.new("TextLabel")
+    status.Size = UDim2.new(1, 0, 0, 25)
+    status.Position = UDim2.new(0, 0, 0, 412)
+    status.BackgroundTransparency = 1
+    status.Text = "🔒 Aguardando validação..."
+    status.TextColor3 = Palette.TextMuted
+    status.TextSize = 12
+    status.Font = Enum.Font.Gotham
+    status.Parent = card
+
+    local info = Instance.new("TextLabel")
+    info.Size = UDim2.new(1, 0, 0, 40)
+    info.Position = UDim2.new(0, 0, 1, -50)
+    info.BackgroundTransparency = 1
+    info.Text = "🌙  Key válida por 7 dias  🌙"
+    info.TextColor3 = Palette.TextMuted
+    info.TextSize = 10
+    info.Font = Enum.Font.Gotham
+    info.Parent = card
+
+    TweenService:Create(card, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+        Size = UDim2.new(0, 360, 0, 500),
+        Position = UDim2.new(0.5, -180, 0.5, -250),
+    }):Play()
+
+    task.spawn(function()
+        while keyGui.Parent do
+            TweenService:Create(ls, TweenInfo.new(1.5), {Thickness = 5}):Play()
+            task.wait(1.5)
+            TweenService:Create(ls, TweenInfo.new(1.5), {Thickness = 3}):Play()
+            task.wait(1.5)
+        end
+    end)
+
+    local attempts = 0
+    local function validate()
+        local typed = keyInput.Text:upper():gsub("%s", "")
+        if typed == "" then
+            status.Text = "⚠ Digite a key!"
+            status.TextColor3 = Color3.fromRGB(255, 180, 100)
+            return
+        end
+        if hashKey(typed) == KEY_HASH then
+            status.Text = "✅ Key válida! Liberando..."
+            status.TextColor3 = Palette.Success
+            validateBtn.Text = "✅  AUTENTICADO"
+            validateBtn.BackgroundColor3 = Palette.Success
+            saveKeyData()
+            task.wait(0.6)
+            TweenService:Create(card, TweenInfo.new(0.4), {
+                Size = UDim2.new(0, 0, 0, 0),
+                Position = UDim2.new(0.5, 0, 0.5, 0),
+            }):Play()
+            task.wait(0.4)
+            keyGui:Destroy()
+            onSuccess()
+        else
+            attempts = attempts + 1
+            status.Text = "❌ Key inválida! (" .. attempts .. "/" .. MAX_ATTEMPTS .. ")"
+            status.TextColor3 = Palette.Danger
+            local op = card.Position
+            for i = 1, 4 do
+                card.Position = op + UDim2.new(0, (i % 2 == 0 and 10 or -10), 0, 0)
+                task.wait(0.04)
+            end
+            card.Position = op
+            if attempts >= MAX_ATTEMPTS then
+                task.wait(1.5)
+                keyGui:Destroy()
+            end
+        end
+    end
+    validateBtn.MouseButton1Click:Connect(validate)
+    keyInput.FocusLost:Connect(function(ep) if ep then validate() end end)
+end
+
+-- ═══════════════════════════════════════════════════════════════
+-- 🎮 CARREGA O HUB
+-- ═══════════════════════════════════════════════════════════════
+local function loadLunarHub()
+
+-- ═══ ANTI-BAN ═══
+local AntiBan = {
+    Enabled = true,
+    MinStaffDistance = 25,
+    MinPlayerDistance = 10,
+    StatusText = "🟢 Seguro",
+}
+local STAFF_KEYWORDS = {"admin", "mod", "staff", "owner", "dev", "gm", "supervisor", "manager"}
+local function isStaffName(name)
+    local n = name:lower()
+    for _, k in ipairs(STAFF_KEYWORDS) do
+        if n:find(k) then return true end
+    end
+    return false
+end
+
+local State = { character = nil, humanoid = nil, rootPart = nil, NearStaff = false, NearPlayer = false }
+
+local function setupChar()
+    State.character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+    State.humanoid = State.character:WaitForChild("Humanoid")
+    State.rootPart = State.character:WaitForChild("HumanoidRootPart")
+end
+setupChar()
+LocalPlayer.CharacterAdded:Connect(function() task.wait(0.5) setupChar() end)
+
+-- ═══ ANTI-BAN LOOP ═══
+task.spawn(function()
+    while true do
+        task.wait(1)
+        if State.rootPart then
+            local ns, np = false, false
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p == LocalPlayer then continue end
+                local c = p.Character
+                if not c then continue end
+                local hrp = c:FindFirstChild("HumanoidRootPart")
+                if not hrp then continue end
+                local d = (State.rootPart.Position - hrp.Position).Magnitude
+                if isStaffName(p.Name) and d < AntiBan.MinStaffDistance then ns = true end
+                if d < AntiBan.MinPlayerDistance then np = true end
+            end
+            State.NearStaff, State.NearPlayer = ns, np
+            if ns then
+                AntiBan.StatusText = "🔴 STAFF PERTO"
+                if Fly_Config.Enabled then Fly_Toggle(false) end
+                if GhostMod.Enabled then Ghost_Toggle(false) end
+                if Spin_Config.Enabled then Spin_Toggle(false) end
+                if ESP_Config.Enabled then ESP_Toggle(false) end
+            elseif np then
+                AntiBan.StatusText = "🟡 Player perto"
+            else
+                AntiBan.StatusText = "🟢 Seguro"
+            end
+        end
+    end
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- 👁 MÓDULO: ESP 2D ROXO
+-- ═══════════════════════════════════════════════════════════════
+local ESP_Config = {
+    Enabled = false, ShowBox = true, ShowLines = true, ShowNames = true,
+    Color = Palette.Purple, BoxThickness = 1.5, LineThickness = 1,
+    TextSize = 14, MaxDistance = 500,
+}
+local ESPObjects = {}
+local ESP_RenderConn = nil
+
+local function espIsFinite(n) return type(n) == "number" and n == n and n ~= math.huge and n ~= -math.huge end
+local function espValidVec2(v) return v and espIsFinite(v.X) and espIsFinite(v.Y) end
+local function espNewDrawing(c)
+    local ok, o = pcall(function() return Drawing.new(c) end)
+    return ok and o or nil
+end
+
+local function espCreateBox(p)
+    if ESPObjects[p.UserId] and ESPObjects[p.UserId].Box then
+        for _, l in ipairs(ESPObjects[p.UserId].Box) do pcall(function() l:Remove() end) end
+    end
+    local box = {}
+    for i = 1, 4 do
+        local line = espNewDrawing("Line")
+        if line then
+            line.Color = ESP_Config.Color
+            line.Thickness = ESP_Config.BoxThickness
+            line.Transparency = 1
+            line.Visible = false
+            line.ZIndex = 2
+            table.insert(box, line)
+        end
+    end
+    ESPObjects[p.UserId] = ESPObjects[p.UserId] or {}
+    ESPObjects[p.UserId].Box = box
+end
+
+local function espCreateLine(p)
+    if ESPObjects[p.UserId] and ESPObjects[p.UserId].Line then return end
+    local line = espNewDrawing("Line")
+    if line then
+        line.Color = ESP_Config.Color
+        line.Thickness = ESP_Config.LineThickness
+        line.Transparency = 1
+        line.Visible = false
+        line.ZIndex = 1
+        ESPObjects[p.UserId] = ESPObjects[p.UserId] or {}
+        ESPObjects[p.UserId].Line = line
+    end
+end
+
+local function espCreateName(p)
+    if ESPObjects[p.UserId] and ESPObjects[p.UserId].Name then return end
+    local txt = espNewDrawing("Text")
+    if txt then
+        txt.Color = ESP_Config.Color
+        txt.Size = ESP_Config.TextSize
+        txt.Center = true
+        txt.Outline = true
+        txt.OutlineColor = Color3.fromRGB(0, 0, 0)
+        txt.Font = 2
+        txt.Text = p.Name
+        txt.Visible = false
+        txt.ZIndex = 3
+        ESPObjects[p.UserId] = ESPObjects[p.UserId] or {}
+        ESPObjects[p.UserId].Name = txt
+    end
+end
+
+local function espHide(p)
+    local d = ESPObjects[p.UserId]
+    if not d then return end
+    if d.Box then for _, l in ipairs(d.Box) do pcall(function() l.Visible = false end) end end
+    if d.Line then pcall(function() d.Line.Visible = false end) end
+    if d.Name then pcall(function() d.Name.Visible = false end) end
+end
+
+local function espRemove(p)
+    local d = ESPObjects[p.UserId]
+    if not d then return end
+    if d.Box then for _, l in ipairs(d.Box) do pcall(function() l:Remove() end) end end
+    if d.Line then pcall(function() d.Line:Remove() end) end
+    if d.Name then pcall(function() d.Name:Remove() end) end
+    ESPObjects[p.UserId] = nil
+end
+
+local function espGetBounds(char)
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local head = char:FindFirstChild("Head")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return nil end
+    local top = head and (head.Position + Vector3.new(0, head.Size.Y/2 + 0.5, 0)) or (hrp.Position + Vector3.new(0, 3, 0))
+    local bot = hrp.Position - Vector3.new(0, 3, 0)
+    local ts = Camera:WorldToScreenPoint(top)
+    local bs = Camera:WorldToScreenPoint(bot)
+    if ts.Z <= 0 or bs.Z <= 0 then return nil end
+    if not espIsFinite(ts.X) or not espIsFinite(ts.Y) then return nil end
+    if not espIsFinite(bs.X) or not espIsFinite(bs.Y) then return nil end
+    local h = math.abs(ts.Y - bs.Y)
+    if not espIsFinite(h) or h < 5 or h > 2000 then return nil end
+    return Vector2.new((ts.X + bs.X)/2, bs.Y), h/2, h
+end
+
+local function espUpdate()
+    if not ESP_Config.Enabled then return end
+    local myChar = LocalPlayer.Character
+    local myHrp = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    local camCF = Camera.CFrame
+    local camLook = camCF.LookVector
+    local camPos = camCF.Position
+    local vp = Camera.ViewportSize
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p == LocalPlayer then
+            if ESPObjects[p.UserId] then espRemove(p) end
+            continue
+        end
+        local char = p.Character
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not char or not hum or hum.Health <= 0 then
+            if ESPObjects[p.UserId] then espRemove(p) end
+            continue
+        end
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if not hrp then espHide(p) continue end
+        local toT = hrp.Position - camPos
+        if toT.Magnitude < 0.1 then espHide(p) continue end
+        if camLook:Dot(toT.Unit) <= 0 then espHide(p) continue end
+        if myHrp and (myHrp.Position - hrp.Position).Magnitude > ESP_Config.MaxDistance then
+            espHide(p)
+            continue
+        end
+        if not ESPObjects[p.UserId] then
+            if ESP_Config.ShowBox then espCreateBox(p) end
+            if ESP_Config.ShowLines then espCreateLine(p) end
+            if ESP_Config.ShowNames then espCreateName(p) end
+        else
+            local d = ESPObjects[p.UserId]
+            if ESP_Config.ShowBox and not d.Box then espCreateBox(p) end
+            if ESP_Config.ShowLines and not d.Line then espCreateLine(p) end
+            if ESP_Config.ShowNames and not d.Name then espCreateName(p) end
+        end
+        local sp, w, h = espGetBounds(char)
+        if sp then
+            local on = sp.X > -200 and sp.X < vp.X + 200 and sp.Y > -200 and sp.Y < vp.Y + 200
+            if on then
+                local d = ESPObjects[p.UserId]
+                if d and d.Box and #d.Box >= 4 then
+                    local tl = Vector2.new(sp.X - w/2, sp.Y - h)
+                    local tr = Vector2.new(sp.X + w/2, sp.Y - h)
+                    local bl = Vector2.new(sp.X - w/2, sp.Y)
+                    local br = Vector2.new(sp.X + w/2, sp.Y)
+                    d.Box[1].From = tl; d.Box[1].To = tr; d.Box[1].Visible = ESP_Config.ShowBox
+                    d.Box[2].From = bl; d.Box[2].To = br; d.Box[2].Visible = ESP_Config.ShowBox
+                    d.Box[3].From = tl; d.Box[3].To = bl; d.Box[3].Visible = ESP_Config.ShowBox
+                    d.Box[4].From = tr; d.Box[4].To = br; d.Box[4].Visible = ESP_Config.ShowBox
+                end
+                if d and d.Line then
+                    d.Line.From = Vector2.new(vp.X/2, vp.Y)
+                    d.Line.To = 
